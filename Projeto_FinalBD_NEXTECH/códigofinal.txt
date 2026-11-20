@@ -1,0 +1,417 @@
+CREATE DATABASE IF NOT EXISTS NexTech;
+USE NexTech;
+
+/*
+  TABELA 1: CATEGORIA
+  Descrição: Armazena as categorias dos componentes de hardware (ex: Processadores, Placas de Vídeo).
+  Chave Primária: id_categoria (INT, Auto Incremento)
+  Regras de Negócio: O campo nome_categoria é de preenchimento obrigatório.
+*/
+CREATE TABLE CATEGORIA (
+    id_categoria INT AUTO_INCREMENT NOT NULL,
+    nome_categoria VARCHAR(50) NOT NULL,
+    CONSTRAINT pk_categoria PRIMARY KEY (id_categoria)
+);
+
+/*
+  TABELA 2: PRODUTO
+  Descrição: Armazena o catálogo de componentes e periféricos vendidos na plataforma NexTech.
+  Chave Primária: id_produto (INT, Auto Incremento)
+  Chave Estrangeira: fk_id_categoria (Relaciona com CATEGORIA.id_categoria)
+  Regras de Negócio:
+    - Preço utiliza DECIMAL(10,2) para exatidão financeira.
+    - Estoque possui valor padrão inicial de 0 unidades.
+    - RESTRICT no DELETE: Impede a exclusão de uma categoria se houver produtos vinculados.
+    - CASCADE no UPDATE: Atualiza automaticamente os produtos se o ID da categoria for alterado.
+*/
+CREATE TABLE PRODUTO (
+    id_produto INT AUTO_INCREMENT NOT NULL,
+    nome_produto VARCHAR(100) NOT NULL,
+    marca VARCHAR(50) NOT NULL,
+    preco DECIMAL(10,2) NOT NULL,
+    estoque INT NOT NULL DEFAULT 0,
+    fk_id_categoria INT NOT NULL,
+    CONSTRAINT pk_produto PRIMARY KEY (id_produto),
+    CONSTRAINT fk_produto_categoria FOREIGN KEY (fk_id_categoria) 
+        REFERENCES CATEGORIA(id_categoria) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+/*
+  TABELA 3: CLIENTE
+  Descrição: Armazena os dados cadastrais e de contato dos clientes da NexTech.
+  Chave Primária: id_cliente (INT, Auto Incremento)
+  Regras de Negócio:
+    - Os campos CPF e E-mail possuem a restrição UNIQUE para evitar cadastros duplicados.
+*/
+CREATE TABLE CLIENTE (
+    id_cliente INT AUTO_INCREMENT NOT NULL,
+    nome VARCHAR(100) NOT NULL,
+    cpf VARCHAR(11) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    telefone VARCHAR(15),
+    CONSTRAINT pk_cliente PRIMARY KEY (id_cliente)
+);
+
+/*
+  TABELA 4: ENDERECO
+  Descrição: Guarda os endereços físicos utilizados para entrega das encomendas.
+  Chave Primária: id_endereco (INT, Auto Incremento)
+  Regras de Negócio: Todos os dados de logradouro, número, bairro, CEP, cidade e UF são obrigatórios.
+*/
+CREATE TABLE ENDERECO (
+    id_endereco INT AUTO_INCREMENT NOT NULL,
+    rua VARCHAR(100) NOT NULL,
+    numero VARCHAR(10) NOT NULL,
+    bairro VARCHAR(50) NOT NULL,
+    cep VARCHAR(8) NOT NULL,
+    cidade VARCHAR(50) NOT NULL,
+    estado CHAR(2) NOT NULL,
+    CONSTRAINT pk_endereco PRIMARY KEY (id_endereco)
+);
+
+/*
+  TABELA 5: CLIENTE_ENDERECO (Tabela Associativa N:M)
+  Descrição: Resolve o relacionamento Muitos-para-Muitos entre CLIENTE e ENDERECO.
+  Chave Primária Composta: (fk_id_cliente, fk_id_endereco)
+  Regras de Negócio:
+    - Permite que um cliente possua múltiplos endereços e um endereço seja compartilhado.
+    - CASCADE no DELETE: Ao remover um cliente ou endereço, a associação é desfeita automaticamente.
+*/
+CREATE TABLE CLIENTE_ENDERECO (
+    fk_id_cliente INT NOT NULL,
+    fk_id_endereco INT NOT NULL,
+    CONSTRAINT pk_cliente_endereco PRIMARY KEY (fk_id_cliente, fk_id_endereco),
+    CONSTRAINT fk_cliend_cliente FOREIGN KEY (fk_id_cliente) REFERENCES CLIENTE(id_cliente) ON DELETE CASCADE,
+    CONSTRAINT fk_cliend_endereco FOREIGN KEY (fk_id_endereco) REFERENCES ENDERECO(id_endereco) ON DELETE CASCADE
+);
+
+/*
+  TABELA 6: CUPOM
+  Descrição: Registra os cupons de desconto promocionais disponíveis na loja.
+  Chave Primária: id_cupom (INT, Auto Incremento)
+  Regras de Negócio: O código do cupom é único (UNIQUE) e armazena o percentual de desconto concedido.
+*/
+CREATE TABLE CUPOM (
+    id_cupom INT AUTO_INCREMENT NOT NULL,
+    codigo VARCHAR(20) NOT NULL UNIQUE,
+    desconto_percentual DECIMAL(5,2) NOT NULL,
+    CONSTRAINT pk_cupom PRIMARY KEY (id_cupom)
+);
+
+/*
+  TABELA 7: PEDIDO
+  Descrição: Armazena as ordens de compra efetuadas na plataforma NexTech.
+  Chave Primária: id_pedido (INT, Auto Incremento)
+  Chaves Estrangeiras: 
+    - fk_id_cliente (Obrigatória: indica quem comprou)
+    - fk_id_cupom (Opcional/NULL: indica se usou desconto)
+  Regras de Negócio: data_pedido grava o momento exato da compra automaticamente via CURRENT_TIMESTAMP.
+*/
+CREATE TABLE PEDIDO (
+    id_pedido INT AUTO_INCREMENT NOT NULL,
+    data_pedido DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    valor_total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    status_pedido VARCHAR(30) NOT NULL,
+    fk_id_cliente INT NOT NULL,
+    fk_id_cupom INT NULL,
+    CONSTRAINT pk_pedido PRIMARY KEY (id_pedido),
+    CONSTRAINT fk_pedido_cliente FOREIGN KEY (fk_id_cliente) REFERENCES CLIENTE(id_cliente),
+    CONSTRAINT fk_pedido_cupom FOREIGN KEY (fk_id_cupom) REFERENCES CUPOM(id_cupom)
+);
+
+/*
+  TABELA 8: ITEM_PEDIDO (Tabela Associativa N:M)
+  Descrição: Resolve a relação N:M entre PEDIDO e PRODUTO, gravando o carrinho de compras.
+  Chave Primária Composta: (fk_id_pedido, fk_id_produto)
+  Regras de Negócio:
+    - Armazena a quantidade de itens e o preco_unitario praticado no momento da compra.
+    - O registro estático do preço preserva o histórico financeiro mesmo se o valor do produto mudar.
+*/
+CREATE TABLE ITEM_PEDIDO (
+    fk_id_pedido INT NOT NULL,
+    fk_id_produto INT NOT NULL,
+    quantidade INT NOT NULL,
+    preco_unitario DECIMAL(10,2) NOT NULL,
+    CONSTRAINT pk_item_pedido PRIMARY KEY (fk_id_pedido, fk_id_produto),
+    CONSTRAINT fk_item_pedido FOREIGN KEY (fk_id_pedido) REFERENCES PEDIDO(id_pedido) ON DELETE CASCADE,
+    CONSTRAINT fk_item_produto FOREIGN KEY (fk_id_produto) REFERENCES PRODUTO(id_produto)
+);
+
+/*
+  TABELA 9: ENTREGA
+  Descrição: Gerencia a logística e o código de rastreamento das encomendas.
+  Chave Primária: id_entrega (INT, Auto Incremento)
+  Chave Estrangeira: fk_id_pedido (Relacionamento 1:1 estrito garantido pela restrição UNIQUE)
+  Regras de Negócio: O código de rastreamento deve ser único no sistema.
+*/
+CREATE TABLE ENTREGA (
+    id_entrega INT AUTO_INCREMENT NOT NULL,
+    codigo_rastreio VARCHAR(50) NOT NULL UNIQUE,
+    transportadora VARCHAR(50) NOT NULL,
+    status_entrega VARCHAR(30) NOT NULL,
+    fk_id_pedido INT NOT NULL UNIQUE,
+    CONSTRAINT pk_entrega PRIMARY KEY (id_entrega),
+    CONSTRAINT fk_entrega_pedido FOREIGN KEY (fk_id_pedido) REFERENCES PEDIDO(id_pedido)
+);
+
+-- ============================================================================
+-- 2. POVOAMENTO DO BANCO DE DADOS (DML - INSERTS DE TESTE)
+-- ============================================================================
+
+USE NexTech;
+
+-- Carga inicial de categorias
+INSERT INTO CATEGORIA (nome_categoria) VALUES 
+('Processadores'), ('Placas de Vídeo'), ('Memória RAM'), ('Armazenamento');
+
+-- Carga inicial de catálogo de produtos
+INSERT INTO PRODUTO (nome_produto, marca, preco, estoque, fk_id_categoria) VALUES
+('Ryzen 5 5600', 'AMD', 850.00, 15, 1),
+('Core i7-13700K', 'Intel', 2400.00, 8, 1),
+('GeForce RTX 4060 8GB', 'NVIDIA', 1950.00, 10, 2),
+('Radeon RX 6750 XT 12GB', 'AMD', 2200.00, 0, 2),
+('Vengeance LPX 16GB (2x8GB) DDR4', 'Corsair', 320.00, 30, 3),
+('Kingston Fury Beast 32GB DDR5', 'Kingston', 780.00, 12, 3),
+('SSD NVMe 1TB Kingston NV2', 'Kingston', 410.00, 25, 4);
+
+-- Carga inicial de clientes
+INSERT INTO CLIENTE (nome, cpf, email, telefone) VALUES
+('Rafael Foggia', '11122233344', 'rafael@email.com', '61999990001'),
+('Caio Oliveira', '22233344455', 'caio@email.com', '61999990002'),
+('Rodrigo Silva', '33344455566', 'rodrigo@email.com', '61999990003'),
+('Guilherme Santos', '44455566677', 'guilherme@email.com', '61999990004'),
+('Andriela Kopp', '55566677788', 'andriela@email.com', '61999990005');
+
+-- Carga inicial de endereços
+INSERT INTO ENDERECO (rua, numero, bairro, cep, cidade, estado) VALUES
+('SQN 210 Bloco A', '102', 'Asa Norte', '70863010', 'Brasília', 'DF'),
+('SQS 305 Bloco C', '304', 'Asa Sul', '70352030', 'Brasília', 'DF'),
+('Rua 14 Norte', 'Lote 2', 'Águas Claras', '71919180', 'Taguatinga', 'DF');
+
+-- Associação de clientes a seus endereços
+INSERT INTO CLIENTE_ENDERECO (fk_id_cliente, fk_id_endereco) VALUES
+(1, 1), (2, 2), (3, 3), (4, 1);
+
+-- Carga inicial de cupons promocionais
+INSERT INTO CUPOM (codigo, desconto_percentual) VALUES
+('NEX10', 10.00), ('GAMER15', 15.00), ('BLACKFRIDAY', 20.00);
+
+-- Carga inicial de pedidos
+INSERT INTO PEDIDO (data_pedido, valor_total, status_pedido, fk_id_cliente, fk_id_cupom) VALUES
+('2026-10-01 10:00:00', 1260.00, 'Entregue', 1, 1),
+('2026-10-05 14:30:00', 1950.00, 'Enviado', 2, NULL),
+('2026-10-10 16:15:00', 2400.00, 'Aguardando Pagamento', 3, 2),
+('2026-10-12 09:00:00', 410.00, 'Cancelado', 4, NULL),
+('2026-10-15 11:45:00', 2270.00, 'Processando', 1, 3);
+
+-- Carga inicial dos itens de cada pedido
+INSERT INTO ITEM_PEDIDO (fk_id_pedido, fk_id_produto, quantidade, preco_unitario) VALUES
+(1, 1, 1, 850.00),
+(1, 7, 1, 410.00),
+(2, 3, 1, 1950.00),
+(3, 2, 1, 2400.00),
+(4, 7, 1, 410.00), 
+(5, 3, 1, 1950.00),
+(5, 5, 1, 320.00); 
+
+-- Carga inicial de dados logísticos de entrega
+INSERT INTO ENTREGA (codigo_rastreio, transportadora, status_entrega, fk_id_pedido) VALUES
+('NT1001BR', 'Loggi', 'Entregue', 1),
+('NT1002BR', 'Correios', 'Em Trânsito', 2);
+
+-- ============================================================================
+-- 3. CONSULTAS SQL (DQL) - BÁSICAS, INTERMEDIÁRIAS E AVANÇADAS
+-- ============================================================================
+
+-- CONSULTA 1 (Básica): Listar todos os registros da tabela CLIENTE
+SELECT * 
+FROM CLIENTE;
+
+-- CONSULTA 2 (Básica): Projeção de colunas específicas para listagem de contatos
+SELECT 
+    nome, 
+    email, 
+    telefone 
+FROM CLIENTE;
+
+-- CONSULTA 3 (Básica): Filtrar produtos com preço acima de R$ 1.000,00
+SELECT 
+    nome_produto, 
+    marca, 
+    preco 
+FROM PRODUTO 
+WHERE preco > 1000.00;
+
+-- CONSULTA 4 (Básica): Filtrar pedidos que possuem o status 'Entregue'
+SELECT 
+    id_pedido, 
+    data_pedido, 
+    valor_total 
+FROM PEDIDO 
+WHERE status_pedido = 'Entregue';
+
+-- CONSULTA 5 (Básica): Listar os códigos promocionais e percentuais de desconto
+SELECT 
+    codigo, 
+    desconto_percentual 
+FROM CUPOM;
+
+-- CONSULTA 6 (Básica): Identificar produtos sem unidades disponíveis em estoque
+SELECT 
+    nome_produto, 
+    marca 
+FROM PRODUTO 
+WHERE estoque = 0;
+
+-- CONSULTA 7 (Intermediária): Listar fabricantes cadastrados sem duplicidades (DISTINCT)
+SELECT DISTINCT 
+    marca 
+FROM PRODUTO;
+
+-- CONSULTA 8 (Intermediária): Coluna calculada projetando 10% de imposto regional
+SELECT 
+    nome_produto, 
+    preco AS preco_original, 
+    (preco * 1.10) AS preco_com_imposto 
+FROM PRODUTO;
+
+-- CONSULTA 9 (Intermediária): Combinação de operadores lógicos (AND / OR) com precedência
+SELECT 
+    nome_produto, 
+    marca, 
+    preco 
+FROM PRODUTO 
+WHERE (marca = 'AMD' OR marca = 'NVIDIA') 
+  AND preco < 2000.00;
+
+-- CONSULTA 10 (Intermediária): Aplicar funções de agregação (AVG, MAX, MIN, SUM) no catálogo
+SELECT 
+    AVG(preco) AS media_preco, 
+    MAX(preco) AS maior_preco, 
+    MIN(preco) AS menor_preco, 
+    SUM(preco * estoque) AS valor_total_estoque 
+FROM PRODUTO;
+
+-- CONSULTA 11 (Intermediária): Contagem total de clientes cadastrados (COUNT)
+SELECT 
+    COUNT(id_cliente) AS total_clientes 
+FROM CLIENTE;
+
+-- CONSULTA 12 (Intermediária): Busca textual por padrão com caractere coringa (LIKE %GB%)
+SELECT 
+    nome_produto, 
+    preco 
+FROM PRODUTO 
+WHERE nome_produto LIKE '%GB%';
+
+-- CONSULTA 13 (Intermediária): Filtrar por faixa de valores (BETWEEN) com ordenação decrescente
+SELECT 
+    nome_produto, 
+    preco 
+FROM PRODUTO 
+WHERE preco BETWEEN 400.00 AND 1000.00 
+ORDER BY preco DESC;
+
+-- CONSULTA 14 (Intermediária): Junção de tabelas (INNER JOIN / LEFT JOIN) com tratamento de NULL
+SELECT 
+    p.id_pedido, 
+    c.nome AS cliente, 
+    p.data_pedido, 
+    p.valor_total, 
+    COALESCE(cp.codigo, 'Sem Cupom') AS cupom_utilizado 
+FROM PEDIDO p 
+INNER JOIN CLIENTE c ON p.fk_id_cliente = c.id_cliente 
+LEFT JOIN CUPOM cp ON p.fk_id_cupom = cp.id_cupom;
+
+-- CONSULTA 15 (Intermediária): Agrupamento por categoria e filtro por total agregado (GROUP BY / HAVING)
+SELECT 
+    cat.nome_categoria, 
+    COUNT(pr.id_produto) AS quantidade_produtos, 
+    SUM(pr.estoque) AS total_estoque 
+FROM CATEGORIA cat 
+INNER JOIN PRODUTO pr ON cat.id_categoria = pr.fk_id_categoria 
+GROUP BY cat.nome_categoria 
+HAVING total_estoque > 10;
+
+-- CONSULTA 16 (Intermediária): Subconsulta comparando preços individuais com a média geral
+SELECT 
+    nome_produto, 
+    preco 
+FROM PRODUTO 
+WHERE preco > (SELECT AVG(preco) FROM PRODUTO);
+
+-- CONSULTA 17 (Intermediária): Detalhar itens comprados por pedido via múltiplos JOINs e cálculo de subtotal
+SELECT 
+    ip.fk_id_pedido AS numero_pedido, 
+    pr.nome_produto, 
+    ip.quantidade, 
+    ip.preco_unitario, 
+    (ip.quantidade * ip.preco_unitario) AS subtotal 
+FROM ITEM_PEDIDO ip 
+INNER JOIN PRODUTO pr ON ip.fk_id_produto = pr.id_produto 
+ORDER BY ip.fk_id_pedido ASC;
+
+/*
+  CONSULTA 18 (Avançada): Stored Procedure para Cadastrar Cliente
+  Descrição: Procedure parametrizada que insere novos clientes no banco de dados.
+*/
+DROP PROCEDURE IF EXISTS sp_CadastrarCliente;
+
+DELIMITER //
+CREATE PROCEDURE sp_CadastrarCliente(
+    IN p_nome VARCHAR(100),
+    IN p_cpf VARCHAR(11),
+    IN p_email VARCHAR(100),
+    IN p_telefone VARCHAR(15)
+)
+BEGIN
+    INSERT INTO CLIENTE (nome, cpf, email, telefone)
+    VALUES (p_nome, p_cpf, p_email, p_telefone);
+END //
+DELIMITER ;
+
+-- Execução do teste da Procedure 18:
+CALL sp_CadastrarCliente('Professor Evaluator 2', '99988877799', 'prof2@udf.br', '61988887799');
+
+/*
+  CONSULTA 19 (Avançada): Stored Procedure para Atualizar Status do Pedido
+  Descrição: Procedure que automatiza a alteração da situação logística/financeira de um pedido.
+*/
+DROP PROCEDURE IF EXISTS sp_AtualizarStatusPedido;
+
+DELIMITER //
+CREATE PROCEDURE sp_AtualizarStatusPedido(
+    IN p_id_pedido INT,
+    IN p_novo_status VARCHAR(30)
+)
+BEGIN
+    UPDATE PEDIDO 
+    SET status_pedido = p_novo_status 
+    WHERE id_pedido = p_id_pedido;
+END //
+DELIMITER ;
+
+-- Execução do teste da Procedure 19:
+CALL sp_AtualizarStatusPedido(2, 'Entregue');
+
+/*
+  CONSULTA 20 (Avançada): Trigger para Baixa Automática de Estoque
+  Descrição: Disparada automaticamente após um novo registro na tabela ITEM_PEDIDO, 
+             subtraindo a quantidade vendida direto do estoque do produto correspondente.
+*/
+DROP TRIGGER IF EXISTS trg_BaixaEstoqueAposVenda;
+
+DELIMITER //
+CREATE TRIGGER trg_BaixaEstoqueAposVenda
+AFTER INSERT ON ITEM_PEDIDO
+FOR EACH ROW
+BEGIN
+    UPDATE PRODUTO 
+    SET estoque = estoque - NEW.quantidade 
+    WHERE id_produto = NEW.fk_id_produto;
+END //
+DELIMITER ;
+
+-- Execução do teste da Trigger 20:
+INSERT INTO ITEM_PEDIDO (fk_id_pedido, fk_id_produto, quantidade, preco_unitario) 
+VALUES (5, 1, 2, 850.00);
